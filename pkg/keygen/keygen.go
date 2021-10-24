@@ -36,6 +36,9 @@ func (km *KeyManager) GenerateKey() (privateKeyPath string, publicKeyData string
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create file '%s': %v", privateKeyPath, err)
 	}
+	if err := os.Chmod(privateKeyPath, 0600); err != nil {
+		return "", "", fmt.Errorf("failed to set permissions on created file: %v", err)
+	}
 	defer file.Close()
 
 	block := pem.Block{

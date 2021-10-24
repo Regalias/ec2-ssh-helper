@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 type SshTarget struct {
 	TargetHost   *SshHost
 	IdentityFile string
-	Bastions     []SshHost
+	Bastions     []*SshHost
 }
 
 type SshHost struct {
@@ -29,7 +30,7 @@ func (host *SshHost) getHostPortString(isHost bool) (opts string) {
 func buildSshCommandOpts(target *SshTarget) []string {
 	// Add identity file
 	// -i <IDENTITY_FILE>
-	sshOpts := []string{"-i", target.IdentityFile}
+	sshOpts := []string{"ssh", "-i", target.IdentityFile}
 
 	if len(target.Bastions) > 0 {
 		// Add bastion jump hosts
@@ -53,17 +54,21 @@ func buildSshCommandOpts(target *SshTarget) []string {
 	return sshOpts
 }
 
-func OpenSshInteractiveShell(target *SshTarget) error {
+func OpenSshInteractiveShell(target *SshTarget) (reconnString string, err error) {
 
-	cmd := exec.Command("ssh", buildSshCommandOpts(target)...)
+	sshOpts := buildSshCommandOpts(target)
+
+	cmd := exec.Command(sshOpts[0], sshOpts[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	err = cmd.Run()
 
 	if err != nil {
-		return fmt.Errorf("could not open SSH shell: %v", err)
+		return "", fmt.Errorf("could not open SSH shell: %v", err)
 	}
 
-	return nil
+	reconnString = strings.Join(sshOpts, " ")
+
+	return reconnString, nil
 }
