@@ -1,7 +1,8 @@
-package main
+package essh
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/pterm/pterm"
@@ -28,10 +29,23 @@ func checkSpinnerError(spinner *pterm.SpinnerPrinter, err error) {
 	}
 }
 
+func checkError(err error) {
+	if err != nil {
+		pterm.Error.WithShowLineNumber(true).Print(err)
+		os.Exit(1)
+	}
+}
+
 func checkFatalError(err error) {
 	if err != nil {
 		pterm.Fatal.WithShowLineNumber(true).Print(err)
 		os.Exit(1)
+	}
+}
+
+func check(err error) {
+	if err != nil {
+		log.Fatalln(err)
 	}
 }
 

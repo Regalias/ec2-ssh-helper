@@ -1,8 +1,9 @@
-package main
+package essh
 
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -13,21 +14,34 @@ import (
 	"github.com/regalias/ec2-ssh-helper-go/pkg/keygen"
 )
 
-func entrypoint(region string) {
+func Entrypoint(region string, useBastion bool, username string, portArg uint) {
 
 	showtitle()
-
-	pterm.Info.Printf("Using region '%s'\n", region)
 
 	// Init config
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if region == "" {
+		// TODO: prompt for region
+		pterm.Error.WithShowLineNumber(true).Print("No AWS region provided")
+		os.Exit(1)
+	}
+
+	// Check port is in range
+	if portArg > math.MaxUint16 {
+		pterm.Error.WithShowLineNumber(true).Print("SSH port '%d' is out of range (max %d)", portArg, math.MaxUint16)
+		os.Exit(1)
+	}
+	port := uint16(portArg)
 
 	cfg, err := config.LoadDefaultConfig(ctx, func(lo *config.LoadOptions) error {
 		lo.Region = region
 		return nil
 	})
 	checkFatalError(err)
+
+	pterm.Info.Printf("Using region '%s', username '%s', port %d\n", cfg.Region, username, port)
 
 	helper := essh.New(cfg)
 
@@ -38,10 +52,10 @@ func entrypoint(region string) {
 	checkSpinnerError(spinner, err)
 
 	if len(instances) < 1 {
-		spinner.Warning(fmt.Sprintf("Found 0 running instances in '%s'. Aborting", region))
+		spinner.Warning(fmt.Sprintf("Found 0 running instances in '%s'. Aborting", cfg.Region))
 		return
 	}
-	spinner.Success(fmt.Sprintf("Found %d running instances in '%s'", len(instances), region))
+	spinner.Success(fmt.Sprintf("Found %d running instances in '%s'", len(instances), cfg.Region))
 
 	// Show EC2 instance details in table
 	header := []string{"Instance Name", "Instance ID", "Type", "VPC", "Subnet", "AZ"}
@@ -103,11 +117,6 @@ func entrypoint(region string) {
 
 	genSpinner.Success("Generated temporary session SSH key")
 
-	// Establish SSH session
-	// TODO: this stuff
-	username := "ec2-user"
-	var port uint16 = 22
-
 	// Install the temporary key
 	keySpinner, err := pterm.DefaultSpinner.WithRemoveWhenDone(false).WithShowTimer(true).Start("[ec2:SendSSHPublicKey] Installing temporary SSH session key...")
 	check(err)
@@ -115,6 +124,7 @@ func entrypoint(region string) {
 	checkSpinnerError(spinner, err)
 	keySpinner.Success("Installed temporary SSH key")
 
+	// Establish SSH session
 	target := essh.GetTargetFromInstances(&instances[targetInstanceIndex], port, username, privateKeyPath, nil)
 
 	pterm.Info.Printf("Opening SSH shell to %s@%s...\n", target.TargetHost.Username, target.TargetHost.Ip)
@@ -123,7 +133,7 @@ func entrypoint(region string) {
 	_, err = essh.OpenSshInteractiveShell(target)
 
 	pterm.EnableOutput()
-	checkFatalError(err)
+	checkError(err)
 
 	pterm.Info.Println("Session ended")
 	// pterm.Info.Printf("To connect again, use '%s'\n", reconn)
